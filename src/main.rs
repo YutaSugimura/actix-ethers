@@ -1,49 +1,53 @@
-use ethers::prelude::*;
-use std::time::Duration;
+use std::env;
+use dotenv::dotenv;
 use std::convert::TryFrom;
 
-use dotenv::dotenv;
-use std::env;
+use actix_web::{get, App, HttpResponse, HttpServer, Responder};
+use ethers::prelude::*;
+
+fn format_html(str: String) -> String {
+    format!("<div><h1>block explorer</h1><h2>block number: {}</h2></div>", str)
+}
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn latest_block_number(url: String) -> String {
+    let provider = Provider::<Http>::try_from(url);
+
+    match provider {
+        Err(_) => format!("error"),
+        Ok(provider) => {
+            let block_number = provider.get_block_number().await;
+
+            match block_number {
+                Err(_) => format!("error"),
+                Ok(block_number) => {
+                    format_html(format!("{}", block_number))
+                }
+            }
+        }
+    }
+}
+
+#[get("/")]
+async fn index() -> impl Responder {
+    match env:: var("URL") {
+        Err(_e) => HttpResponse::Ok().body("Something went wrong"),
+        Ok(url) => {
+            let block_number = latest_block_number(url);
+            HttpResponse::Ok().body(block_number)
+        },
+    }
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
-    let url = env::var("URL").expect("URL is not found");
-
-    let provider = Provider::<Http>::try_from(url)?;
-    let result = provider.get_block_number().await;
-
-    match result {
-        Ok(block_number) => {
-            let result_block = provider.get_block(block_number).await?;
-
-            match result_block {
-                Some(block_detail) => {
-                    println!("block_hash={:?}", &block_detail.hash);
-                    println!("block_gas_used={}", &block_detail.gas_used);
-                    println!("timestamp={}", &block_detail.timestamp);
-                    println!("tx start");
-                    for tx in &block_detail.transactions {
-                        println!("{}", tx);
-                    }
-                    println!("tx end");
-                },
-                None => println!("None"),
-            }
-        },
-        Err(e) => {}
-    }
-
-
-    // let url_ws = env::var("URL").expect("URL is not found");
-    // let ws = Ws::connect(url_ws).await?;
-    // let provider = Provider::new(ws).interval(Duration::from_millis(2000));
-    // let mut stream = provider.watch_blocks().await?.stream();
-    // while let Some(block_hash) = stream.next().await {
-    //     let mut block_number = provider.get_block_number().await?.to_string();
-    //     dbg!(block_number, block_hash);
-    // }
-
-    Ok(())
+    HttpServer::new(|| {
+        App::new()
+            .service(index)
+    })
+        .bind("127.0.0.1:8080")?
+        .run()
+        .await
 }
