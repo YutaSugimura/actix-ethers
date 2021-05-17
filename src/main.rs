@@ -7,13 +7,15 @@ use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use ethers::prelude::*;
 
 fn format_transaction(transactions: Vec<H256>) -> String {
-    let mut tx_str: String = String::from("<div>");
+    let mut tx_str: String = String::from("<div><ul>");
 
     for tx in transactions {
-        tx_str = tx_str.to_string() + "<p>" + &*tx.to_string() + "</p>";
+        let str = format!("{:02X}", tx);
+        let url = format!("'https://etherscan.io/tx/0x{}'", &str);
+        tx_str = tx_str.to_string() + "<li><a href=" + &*url + ">" + "0x" + &*str + "</a></li>";
     }
 
-    tx_str = tx_str + "</div>";
+    tx_str = tx_str + "</ul></div>";
     tx_str
 }
 
@@ -65,7 +67,7 @@ async fn latest_block(url: String) -> String {
                     let block_hash = match &block_result {
                         Some(data) => {
                             match data.hash {
-                                Some(hash) => hash.to_string(),
+                                Some(hash) => format!("0x{:02X}", hash),
                                 None => String::from("Error"),
                             }
                         },
