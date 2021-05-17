@@ -1,28 +1,96 @@
 use std::env;
 use dotenv::dotenv;
 use std::convert::TryFrom;
+use std::string::String;
 
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use ethers::prelude::*;
 
-fn format_html(str: String) -> String {
-    format!("<div><h1>block explorer</h1><h2>block number: {}</h2></div>", str)
+fn format_transaction(transactions: Vec<H256>) -> String {
+    let mut tx_str: String = String::from("<div>");
+
+    for tx in transactions {
+        tx_str = tx_str.to_string() + "<p>" + &*tx.to_string() + "</p>";
+    }
+
+    tx_str = tx_str + "</div>";
+    tx_str
+}
+
+fn format_html(block_number: U64, block_hash: String, block_gas_used: U256, timestamp: U256, transaction_str: String) -> String {
+    format!("\
+        <html lang='en' />\
+            <head>\
+                <meta charset='UTF-8'>\
+            </head>\
+            <body>\
+                <div>\
+                    <h1>Ethereum latest block data</h1>\
+                    <h2>block number: {}</h2>\
+                    <div>\
+                        <p>block hash: {}</p>\
+                        <p>gas used: {}</p>\
+                        <p>timestamp: {}</p>\
+                    </div>\
+
+                    <div>\
+                        <h3>transactions</h3>
+                        {}\
+                    </div>\
+                </div>\
+            </body>\
+        </html>
+    ", block_number, block_hash, block_gas_used, timestamp, transaction_str)
 }
 
 #[tokio::main]
-async fn latest_block_number(url: String) -> String {
+async fn latest_block(url: String) -> String {
     let provider = Provider::<Http>::try_from(url);
 
     match provider {
         Err(_) => format!("error"),
         Ok(provider) => {
-            let block_number = provider.get_block_number().await;
+            let block_number = match provider.get_block_number().await {
+                Err(_) => U64::from(0),
+                Ok(num) => num,
+            };
 
-            match block_number {
-                Err(_) => format!("error"),
-                Ok(block_number) => {
-                    format_html(format!("{}", block_number))
-                }
+            if block_number == U64::from(0) {
+                format!("error");
+            }
+
+            match provider.get_block(block_number).await {
+                Err(_) => format!("errpr"),
+                Ok(block_result) => {
+                    let block_hash = match &block_result {
+                        Some(data) => {
+                            match data.hash {
+                                Some(hash) => hash.to_string(),
+                                None => String::from("Error"),
+                            }
+                        },
+                        None => String::from("unknown"),
+                    };
+
+                    let block_gas_used = match &block_result {
+                        Some(data) => data.gas_limit,
+                        None => U256::from(0),
+                    };
+
+                    let timestamp = match &block_result {
+                        Some(data) => data.timestamp,
+                        None => U256::from(0),
+                    };
+
+                    let transaction = match block_result {
+                        Some(data) => data.transactions,
+                        None => Vec::new(),
+                    };
+
+                    let transaction_str = format_transaction(transaction);
+
+                    format_html(block_number, block_hash, block_gas_used, timestamp, transaction_str)
+                },
             }
         }
     }
@@ -33,7 +101,7 @@ async fn index() -> impl Responder {
     match env:: var("URL") {
         Err(_e) => HttpResponse::Ok().body("Something went wrong"),
         Ok(url) => {
-            let block_number = latest_block_number(url);
+            let block_number = latest_block(url);
             HttpResponse::Ok().body(block_number)
         },
     }
