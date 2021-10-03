@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::string::String;
 
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
-use ethers::prelude::*;
+use ethers::{prelude::*};
 
 fn format_transaction(transactions: Vec<H256>) -> String {
     let mut tx_str: String = String::from("<div><ul>");
@@ -108,6 +108,9 @@ async fn index() -> impl Responder {
         },
     }
 }
+
+// #[get("/erc20")]
+// async fn erc20() -> impl Responder {}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
